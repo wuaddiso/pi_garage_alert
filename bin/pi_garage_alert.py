@@ -34,26 +34,28 @@ Learn more at http://www.richlynch.com/code/pi_garage_alert
 # DEALINGS IN THE SOFTWARE.
 #
 ##############################################################################
-
+import MockGPIO as GPIO
+# import RPi.GPIO as GPIO
 import time
-from time import strftime
 import subprocess
+import threading
 import re
 import sys
-import json
-import logging
-from datetime import timedelta
-import smtplib
-import ssl
-import traceback
-from email.mime.text import MIMEText
-
-import requests
+import signal
 import tweepy
-import RPi.GPIO as GPIO
+import logging
+import smtplib
 import httplib2
 import sleekxmpp
 from sleekxmpp.xmlstream import resolver, cert
+import ssl
+import traceback
+import SocketServer
+import json
+from email.mime.text import MIMEText
+
+from time import strftime
+from datetime import timedelta
 from twilio.rest import TwilioRestClient
 from twilio.rest.exceptions import TwilioRestException
 
@@ -115,7 +117,7 @@ class Jabber(sleekxmpp.ClientXMPP):
 
         if hasattr(cfg, 'JABBER_SERVER') and hasattr(cfg, 'JABBER_PORT'):
             # Config file overrode the default server and port
-            if not self.connect((cfg.JABBER_SERVER, cfg.JABBER_PORT)): # pylint: disable=no-member
+            if not self.connect((cfg.JABBER_SERVER, cfg.JABBER_PORT)):
                 return
         else:
             # Use default server and port from DNS SRV records
@@ -231,7 +233,7 @@ class Twilio(object):
 
         # User may not have configured twilio - don't initialize it until it's
         # first used
-        if self.twilio_client is None:
+        if self.twilio_client == None:
             self.logger.info("Initializing Twilio")
 
             if cfg.TWILIO_ACCOUNT == '' or cfg.TWILIO_TOKEN == '':
@@ -273,7 +275,7 @@ class Twitter(object):
 
         # User may not have configured twitter - don't initialize it until it's
         # first used
-        if self.twitter_api is None:
+        if self.twitter_api == None:
             self.logger.info("Initializing Twitter")
 
             if cfg.TWITTER_CONSUMER_KEY == '' or cfg.TWITTER_CONSUMER_SECRET == '':
@@ -348,79 +350,13 @@ class Email(object):
         msg['Subject'] = subject
         msg['To'] = recipient
         msg['From'] = cfg.EMAIL_FROM
-        msg['X-Priority'] = cfg.EMAIL_PRIORITY
 
         try:
             mail = smtplib.SMTP(cfg.SMTP_SERVER, cfg.SMTP_PORT)
-            if cfg.SMTP_USER != '' and cfg.SMTP_PASS != '':
-                mail.login(cfg.SMTP_USER, cfg.SMTP_PASS)
             mail.sendmail(cfg.EMAIL_FROM, recipient, msg.as_string())
             mail.quit()
         except:
             self.logger.error("Exception sending email: %s", sys.exc_info()[0])
-
-##############################################################################
-# Pushbullet support
-##############################################################################
-
-class Pushbullet(object):
-    """Class to send Pushbullet notes"""
-
-    def __init__(self):
-        self.logger = logging.getLogger(__name__)
-
-    def send_note(self, access_token, title, body):
-        """Sends a note to the specified access token.
-
-        Args:
-            access_token: Access token of the Pushbullet account to send to.
-            title: Note title
-            body: Body of the note to send
-        """
-        self.logger.info("Sending Pushbullet note to %s: title = \"%s\", body = \"%s\"", access_token, title, body)
-
-        headers = {'Content-type': 'application/json'}
-        payload = {'type': 'note', 'title': title, 'body': body}
-
-        try:
-            session = requests.Session()
-            session.auth = (access_token, "")
-            session.headers.update(headers)
-            session.post("https://api.pushbullet.com/v2/pushes", data=json.dumps(payload))
-        except:
-            self.logger.error("Exception sending note: %s", sys.exc_info()[0])
-
-##############################################################################
-# Google Cloud Messaging support
-##############################################################################
-
-class GoogleCloudMessaging(object):
-    """Class to send GCM notifications"""
-
-    def __init__(self):
-        self.logger = logging.getLogger(__name__)
-
-    def send_push(self, state, body):
-        """Sends a push notification to the specified topic.
-
-        Args:
-            state: Garage door state as string ("0"|"1")
-            body: Body of the note to send
-        """
-        status = "1" if state == 'open' else "0"
-
-        self.logger.info("Sending GCM push to %s: status = \"%s\", body = \"%s\"", cfg.GCM_TOPIC, status, body)
-
-        auth_header = "key=" + cfg.GCM_KEY
-        headers = {'Content-type': 'application/json', 'Authorization': auth_header}
-        payload = {'to': cfg.GCM_TOPIC, 'data': {'message': body, 'status': status}}
-
-        try:
-            session = requests.Session()
-            session.headers.update(headers)
-            session.post("https://gcm-http.googleapis.com/gcm/send", data=json.dumps(payload))
-        except:
-            self.logger.error("Exception sending push: %s", sys.exc_info()[0])
 
 ##############################################################################
 # Sensor support
@@ -432,7 +368,7 @@ def get_garage_door_state(pin):
     Args:
         pin: GPIO pin number.
     """
-    if GPIO.input(pin): # pylint: disable=no-member
+    if GPIO.input(pin):
         state = 'open'
     else:
         state = 'closed'
@@ -481,14 +417,13 @@ def rpi_status():
 # Logging and alerts
 ##############################################################################
 
-def send_alerts(logger, alert_senders, recipients, subject, msg, state):
+def send_alerts(logger, alert_senders, recipients, subject, msg):
     """Send subject and msg to specified recipients
 
     Args:
         recipients: An array of strings of the form type:address
         subject: Subject of the alert
         msg: Body of the alert
-        state: The state of the door
     """
     for recipient in recipients:
         if recipient[:6] == 'email:':
@@ -501,10 +436,6 @@ def send_alerts(logger, alert_senders, recipients, subject, msg, state):
             alert_senders['Twilio'].send_sms(recipient[4:], msg)
         elif recipient[:7] == 'jabber:':
             alert_senders['Jabber'].send_msg(recipient[7:], msg)
-        elif recipient[:11] == 'pushbullet:':
-            alert_senders['Pushbullet'].send_note(recipient[11:], subject, msg)
-        elif recipient == 'gcm':
-            alert_senders['Gcm'].send_push(state, msg)
         else:
             logger.error("Unrecognized recipient type: %s", recipient)
 
@@ -550,6 +481,28 @@ def format_duration(duration_sec):
         ret += "%d seconds" % (seconds)
 
     return ret
+##############################################################################
+# Server Support
+##############################################################################
+class MyTCPServer(SocketServer.ThreadingTCPServer):
+    allow_reuse_address = True
+
+class MyTCPServerHandler(SocketServer.BaseRequestHandler):
+    def handle(self):
+        status = []
+        for door in cfg.GARAGE_DOORS:
+            name = door['name']
+            state = get_garage_door_state(door['pin'])
+            temp = [name, state]
+            status.append(temp)
+            
+        status_message = json.dumps(status)
+                
+        try:
+            self.request.sendall(status_message);
+
+        except Exception as e:
+            print ("Exception while sending message: ", e)
 
 
 ##############################################################################
@@ -561,97 +514,136 @@ class PiGarageAlert(object):
     def __init__(self):
         self.logger = logging.getLogger(__name__)
 
+    def clean_up(self, signum,frame):
+        local = frame.f_locals
+
+        if (signum == signal.SIGINT) :
+            logging.critical("Terminating due to keyboard interrupt")
+        else:
+            logging.critical("Terminating due to SIGTERM")
+        
+        local['server'].shutdown()
+        local['alert_senders']['Jabber'].terminate()
+        GPIO.cleanup()
+        sys.exit(0)
+
+
     def main(self):
         """Main functionality
         """
 
+        # try:
+        # Set up logging
+        log_fmt = '%(asctime)-15s %(levelname)-8s %(message)s'
+        log_level = logging.INFO
+
+        if sys.stdout.isatty():
+            # Connected to a real terminal - log to stdout
+            logging.basicConfig(format=log_fmt, level=log_level)
+        else:
+            # Background mode - log to file
+            logging.basicConfig(format=log_fmt, level=log_level, filename=cfg.LOG_FILENAME)
+
+        #setup signal handling
+        signal.signal(signal.SIGTERM, self.clean_up)
+        signal.signal(signal.SIGINT, self.clean_up)
+        # Banner
+        self.logger.info("==========================================================")
+        self.logger.info("Pi Garage Alert starting")
+
+        # Use Raspberry Pi board pin numbers
+        self.logger.info("Configuring global settings")
+        GPIO.setmode(GPIO.BOARD)
+
+        # Configure the sensor pins as inputs with pull up resistors
+        for door in cfg.GARAGE_DOORS:
+            self.logger.info("Configuring pin %d for \"%s\"", door['pin'], door['name'])
+            GPIO.setup(door['pin'], GPIO.IN, pull_up_down=GPIO.PUD_UP)
+            GPIO.setup(door['relay'], GPIO.OUT)
+            GPIO.output(door['relay'], GPIO.HIGH)
+
+        # Last state of each garage door
+        door_states = dict()
+
+        # time.time() of the last time the garage door changed state
+        time_of_last_state_change = dict()
+
+        # Index of the next alert to send for each garage door
+        alert_states = dict()
+
+        # Create alert sending objects
+        alert_senders = {
+            "Jabber": Jabber(door_states, time_of_last_state_change),
+            "Twitter": Twitter(),
+            "Twilio": Twilio(),
+            "Email": Email()
+        }
+
+        # Read initial states
+        for door in cfg.GARAGE_DOORS:
+            name = door['name']
+            state = get_garage_door_state(door['pin'])
+            relay = door['relay']
+
+            door_states[name] = state
+            time_of_last_state_change[name] = time.time()
+            alert_states[name] = 0
+
+            self.logger.info("Initial state of \"%s\" is %s", name, state)
+        # Set state of relay pins as appropiate
+        # eg GPIO.LOW if relay is to be activated
+        # GPIO.HIGH otherwise
+        if (state == 'closed'):
+            GPIO.output(relay,GPIO.HIGH)
+        else:
+            GPIO.output(relay,GPIO.LOW)
+
+        # end initial setup
+
+        server = MyTCPServer(('', 36410), MyTCPServerHandler)
+        t = threading.Thread(target = server.serve_forever)
+        t.start()
+
+        status_report_countdown = 5
         try:
-            # Set up logging
-            log_fmt = '%(asctime)-15s %(levelname)-8s %(message)s'
-            log_level = logging.INFO
-
-            if sys.stdout.isatty():
-                # Connected to a real terminal - log to stdout
-                logging.basicConfig(format=log_fmt, level=log_level)
-            else:
-                # Background mode - log to file
-                logging.basicConfig(format=log_fmt, level=log_level, filename=cfg.LOG_FILENAME)
-
-            # Banner
-            self.logger.info("==========================================================")
-            self.logger.info("Pi Garage Alert starting")
-
-            # Use Raspberry Pi board pin numbers
-            self.logger.info("Configuring global settings")
-            GPIO.setmode(GPIO.BOARD)
-
-            # Configure the sensor pins as inputs with pull up resistors
-            for door in cfg.GARAGE_DOORS:
-                self.logger.info("Configuring pin %d for \"%s\"", door['pin'], door['name'])
-                GPIO.setup(door['pin'], GPIO.IN, pull_up_down=GPIO.PUD_UP)
-
-            # Last state of each garage door
-            door_states = dict()
-
-            # time.time() of the last time the garage door changed state
-            time_of_last_state_change = dict()
-
-            # Index of the next alert to send for each garage door
-            alert_states = dict()
-
-            # Create alert sending objects
-            alert_senders = {
-                "Jabber": Jabber(door_states, time_of_last_state_change),
-                "Twitter": Twitter(),
-                "Twilio": Twilio(),
-                "Email": Email(),
-                "Pushbullet": Pushbullet(),
-                "Gcm": GoogleCloudMessaging()
-            }
-
-            # Read initial states
-            for door in cfg.GARAGE_DOORS:
-                name = door['name']
-                state = get_garage_door_state(door['pin'])
-
-                door_states[name] = state
-                time_of_last_state_change[name] = time.time()
-                alert_states[name] = 0
-
-                self.logger.info("Initial state of \"%s\" is %s", name, state)
-
-            status_report_countdown = 5
             while True:
                 for door in cfg.GARAGE_DOORS:
                     name = door['name']
                     state = get_garage_door_state(door['pin'])
                     time_in_state = time.time() - time_of_last_state_change[name]
+                    relay = door['relay']
 
                     # Check if the door has changed state
                     if door_states[name] != state:
                         door_states[name] = state
                         time_of_last_state_change[name] = time.time()
                         self.logger.info("State of \"%s\" changed to %s after %.0f sec", name, state, time_in_state)
+                    if (state == 'closed'):
+                        GPIO.output(relay, GPIO.HIGH)
+                    else:
+                        GPIO.output(relay, GPIO.LOW)
 
-                        # Reset alert when door changes state
-                        if alert_states[name] > 0:
-                            # Use the recipients of the last alert
-                            recipients = door['alerts'][alert_states[name] - 1]['recipients']
-                            send_alerts(self.logger, alert_senders, recipients, name, "%s is now %s" % (name, state), state)
-                            alert_states[name] = 0
+                    #     # Reset alert when door changes state
+                    # if alert_states[name] > 0:
+                        
+                    #     for alarm in door['alerts']:
+                    #         if state != alarm['state']:
+                    #             #inform the recipients that the alert condition is now off
+                    #             recipients = alarm['recipients']
+                    #             send_alerts(self.logger, alert_senders, recipients, name, "%s is now %s" % (name, state))
+                    #             alert_states[name] -= 1
+                    #             # Reset time_in_state
+                    #             time_in_state = 0
 
-                        # Reset time_in_state
-                        time_in_state = 0
+                    # # See if there are more alerts
+                    # if len(door['alerts']) > alert_states[name]:
+                    #     # Get info about alert
+                    #     alert = door['alerts'][alert_states[name]]
 
-                    # See if there are more alerts
-                    if len(door['alerts']) > alert_states[name]:
-                        # Get info about alert
-                        alert = door['alerts'][alert_states[name]]
-
-                        # Has the time elapsed and is this the state to trigger the alert?
-                        if time_in_state > alert['time'] and state == alert['state']:
-                            send_alerts(self.logger, alert_senders, alert['recipients'], name, "%s has been %s for %d seconds!" % (name, state, time_in_state), state)
-                            alert_states[name] += 1
+                    #     # Has the time elapsed and is this the state to trigger the alert?
+                    #     if time_in_state > alert['time'] and state == alert['state']:
+                    #         send_alerts(self.logger, alert_senders, alert['recipients'], name, "%s has been %s for %d seconds!" % (name, state, time_in_state))
+                    #         alert_states[name] += 1
 
                 # Periodically log the status for debug and ensuring RPi doesn't get too hot
                 status_report_countdown -= 1
@@ -667,14 +659,14 @@ class PiGarageAlert(object):
 
                 # Poll every 1 second
                 time.sleep(1)
-        except KeyboardInterrupt:
-            logging.critical("Terminating due to keyboard interrupt")
         except:
             logging.critical("Terminating due to unexpected error: %s", sys.exc_info()[0])
             logging.critical("%s", traceback.format_exc())
+            server.shutdown()
+            GPIO.cleanup()
 
-        GPIO.cleanup() # pylint: disable=no-member
-        alert_senders['Jabber'].terminate()
+        
+        # alert_senders['Jabber'].terminate()
 
 if __name__ == "__main__":
     PiGarageAlert().main()

@@ -24,18 +24,20 @@ GARAGE_DOORS = [
 #    },
 
     {
+#	note this is absolute numbering
         'pin': 15,
-        'name': "Example Garage Door",
+        'name': "Garage Door",
+	    'relay': 16,
         'alerts': [
+            {
+                'state': 'open',
+                'time': 3600,
+                'recipients': [ 'email:addison.wu@mail.utoronto.ca' ]
+            }
 #            {
 #                'state': 'open',
-#                'time': 120,
-#                'recipients': [ 'sms:+11112223333', 'email:someone@example.com', 'twitter_dm:twitter_user', 'pushbullet:access_token', 'gcm', 'tweet' ]
-#            },
-#            {
-#                'state': 'open',
-#                'time': 600,
-#                'recipients': [ 'sms:+11112223333', 'email:someone@example.com', 'twitter_dm:twitter_user', 'pushbullet:access_token', 'gcm', 'tweet' ]
+#                'time': 7200,
+#                'recipients': [ 'email:addison.wu@mail.utoronto.ca' ]
 #            }
         ]
     }
@@ -50,11 +52,7 @@ LOG_FILENAME = "/var/log/pi_garage_alert.log"
 
 SMTP_SERVER = 'localhost'
 SMTP_PORT = 25
-SMTP_USER = ''
-SMTP_PASS = ''
 EMAIL_FROM = 'Garage Door <user@example.com>'
-EMAIL_PRIORITY = '1'
-# 1 High, 3 Normal, 5 Low
 
 ##############################################################################
 # Twitter settings
@@ -99,10 +97,10 @@ JABBER_PASSWORD = ''
 # List of Jabber IDs allowed to perform queries
 
 JABBER_AUTHORIZED_IDS = []
-
 ##############################################################################
-# Google Cloud Messaging settings
+# Server Settings
 ##############################################################################
 
-GCM_KEY = ''
-GCM_TOPIC = ''
+SERVER_IP = '127.0.0.1'
+SERVER_PORT = '36410'
+
