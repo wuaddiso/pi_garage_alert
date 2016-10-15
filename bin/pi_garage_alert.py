@@ -34,8 +34,13 @@ Learn more at http://www.richlynch.com/code/pi_garage_alert
 # DEALINGS IN THE SOFTWARE.
 #
 ##############################################################################
-import MockGPIO as GPIO
-# import RPi.GPIO as GPIO
+debug = 1
+if debug:
+    import MockGPIO as GPIO
+else:
+    import RPi.GPIO as GPIO
+    
+    
 import time
 import subprocess
 import threading
@@ -411,7 +416,12 @@ def get_cpu_temp():
 def rpi_status():
     """Return string summarizing RPi status
     """
-    return "CPU temp: %.1f, GPU temp: %.1f, Uptime: %s" % (get_gpu_temp(), get_cpu_temp(), get_uptime())
+    if debug:
+        ret_str = "Debug mode, no status to report"
+    else:
+        ret_str = "CPU temp: %.1f, GPU temp: %.1f, Uptime: %s" % (get_gpu_temp(), get_cpu_temp(), get_uptime())
+
+    return ret_str
 
 ##############################################################################
 # Logging and alerts

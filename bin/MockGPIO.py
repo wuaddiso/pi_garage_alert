@@ -1,25 +1,5 @@
 import Tkinter
 #interface with gui
-BOARD = 0
-IN = 0
-OUT = 1
-LOW = 0
-HIGH = 1
-PUD_DOWN = 0
-PUD_UP = 1
-def setmode(board):
-	GPIO = MockGPIO()
-	#spawn gui process here
-	
-def input(pin):
-	return GPIO.input(pin)
-
-def setup():
-	pass
-
-def output():
-	pass
-
 
 #actual object containing logic and data
 class MockGPIO(object):
@@ -36,7 +16,7 @@ class MockGPIO(object):
 		self.HIGH = 1
 		self.PUD_DOWN = 0
 		self.PUD_UP = 1
-		self.top = Tkinter.Tk()
+		# self.top = Tkinter.Tk()
 
 	def input(self,pin):
 		return self.state[pin]
@@ -51,14 +31,14 @@ class MockGPIO(object):
 	#indiates what pin is what type
 	def setup(self,pin,ptype):
 		if ptype == self.IN:
-
 			self.input_pins.append(pin)
 		else:
 			self.output_pins.append(pin)
-		b = Tkinter.Button(self.top,
-						   text="toggle garage",
-						   command = lambda:toggle(pin))
-		b.pack()
+		self.state[pin] = self.LOW
+		# b = Tkinter.Button(self.top,
+		# 				   text="toggle garage",
+		# 				   command = lambda:toggle(pin))
+		# b.pack()
 	
 	def output(self,pin,p2,pull_up_down=1):
 		pass
@@ -67,8 +47,33 @@ class MockGPIO(object):
 		#spawn a gui thread
 		pass
 
-	def cleanup():
+	def cleanup(self):
 		pass
+
+BOARD = 0
+IN = 0
+OUT = 1
+LOW = 0
+HIGH = 1
+PUD_DOWN = 0
+PUD_UP = 1
+GPIO = MockGPIO()
+def setmode(board):
+	#spawn gui process here
+	pass
+
+def input(pin):
+	return GPIO.input(pin)
+
+def setup(pin,ptype,pull_up_down=PUD_UP):
+	GPIO.setup(pin,ptype)
+
+def output(pin,p2,pull_up_down=PUD_UP):
+	GPIO.output(pin,p2,pull_up_down)
+
+def cleanup():
+	GPIO.cleanup()
+
 
 
 # if __name__=='__main__':
