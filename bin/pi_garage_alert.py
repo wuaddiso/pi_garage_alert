@@ -563,7 +563,10 @@ class PiGarageAlert(object):
 
         # Use Raspberry Pi board pin numbers
         self.logger.info("Configuring global settings")
-        GPIO.setmode(GPIO.BOARD)
+        if debug:
+            GPIO.setmode(GPIO.BOARD,GPIO.INTERACTIVE,cfg)
+        else:
+            GPIO.setmode(GPIO.BOARD)
 
         # Configure the sensor pins as inputs with pull up resistors
         for door in cfg.GARAGE_DOORS:

@@ -1,10 +1,11 @@
 import Tkinter
-#interface with gui
+import threading
+
 
 #actual object containing logic and data
 class MockGPIO(object):
 	
-	def __init__(self):
+	def __init__(self,gui=None):
 		self.state = dict()
 		self.type = dict()
 		self.input_pins = []
@@ -16,7 +17,7 @@ class MockGPIO(object):
 		self.HIGH = 1
 		self.PUD_DOWN = 0
 		self.PUD_UP = 1
-		# self.top = Tkinter.Tk()
+		self.top = gui
 
 	def input(self,pin):
 		return self.state[pin]
@@ -50,6 +51,13 @@ class MockGPIO(object):
 	def cleanup(self):
 		pass
 
+	def updateGUI(self):
+		if gui:
+			pass
+		else:
+			pass
+		pass
+
 BOARD = 0
 IN = 0
 OUT = 1
@@ -57,13 +65,35 @@ LOW = 0
 HIGH = 1
 PUD_DOWN = 0
 PUD_UP = 1
+INTERACTIVE = 1
+AUTOMATED = 0
 GPIO = MockGPIO()
-def setmode(board):
-	#spawn gui process here
-	pass
 
+def setmode(board,test_mode,cfg):
+	pass
+	#spawn gui process here
+	if test_mode==INTERACTIVE:
+		t = threading.Thread(target=display, args = (GPIO,cfg))
+		t.daemon = True
+		t.start()
+	else:
+		pass
+
+#naming clash with python's input
 def input(pin):
 	return GPIO.input(pin)
+
+def toggle(pin):
+	GPIO.toggle(pin)
+
+def status(pin):
+	ans = GPIO.input(pin)
+	response=""
+	if ans == HIGH:
+		response=" closed"
+	else:
+		response=" open"
+	return response
 
 def setup(pin,ptype,pull_up_down=PUD_UP):
 	GPIO.setup(pin,ptype)
@@ -74,7 +104,22 @@ def output(pin,p2,pull_up_down=PUD_UP):
 def cleanup():
 	GPIO.cleanup()
 
+def display(GPIO,cfg):
+	# pass
+	top = Tkinter.Tk()
+	for door in cfg.GARAGE_DOORS:
+		pin = door['pin']
+		b = Tkinter.Button(top, 
+			text = str(door['name']+status(pin)), 
+			command = lambda: updateButton(pin,b,door))
+		b.pack()
 
+	top.mainloop()
+
+def updateButton(pin,button,door):
+	toggle(pin)
+	t = door['name']+" is "+status(pin)
+	button.configure(text=t)   
 
 # if __name__=='__main__':
 #  # server = MyTCPServer(('127.0.0.1', 13373), MyTCPServerHandler)
