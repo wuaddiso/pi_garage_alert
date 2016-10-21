@@ -5,7 +5,7 @@ import threading
 #actual object containing logic and data
 class MockGPIO(object):
 	
-	def __init__(self,gui=None):
+	def __init__(self):
 		self.state = dict()
 		self.type = dict()
 		self.input_pins = []
@@ -17,7 +17,6 @@ class MockGPIO(object):
 		self.HIGH = 1
 		self.PUD_DOWN = 0
 		self.PUD_UP = 1
-		self.top = gui
 
 	def input(self,pin):
 		return self.state[pin]
@@ -35,27 +34,16 @@ class MockGPIO(object):
 			self.input_pins.append(pin)
 		else:
 			self.output_pins.append(pin)
-		self.state[pin] = self.LOW
-		# b = Tkinter.Button(self.top,
-		# 				   text="toggle garage",
-		# 				   command = lambda:toggle(pin))
-		# b.pack()
+		self.type[pin] = self.LOW
+
 	
 	def output(self,pin,p2,pull_up_down=1):
 		pass
 
 	def setmode(self,board):
-		#spawn a gui thread
 		pass
 
 	def cleanup(self):
-		pass
-
-	def updateGUI(self):
-		if gui:
-			pass
-		else:
-			pass
 		pass
 
 BOARD = 0
@@ -90,9 +78,9 @@ def status(pin):
 	ans = GPIO.input(pin)
 	response=""
 	if ans == HIGH:
-		response=" closed"
+		response="closed"
 	else:
-		response=" open"
+		response="open"
 	return response
 
 def setup(pin,ptype,pull_up_down=PUD_UP):
@@ -120,9 +108,3 @@ def updateButton(pin,button,door):
 	toggle(pin)
 	t = door['name']+" is "+status(pin)
 	button.configure(text=t)   
-
-# if __name__=='__main__':
-#  # server = MyTCPServer(('127.0.0.1', 13373), MyTCPServerHandler)
-#  # server.serve_forever()
-#  # print 'blah'
-# 	
