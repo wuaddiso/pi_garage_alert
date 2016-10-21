@@ -70,13 +70,13 @@ AUTOMATED = 0
 GPIO = MockGPIO()
 
 def setmode(board,test_mode,cfg):
-	pass
 	#spawn gui process here
 	if test_mode==INTERACTIVE:
 		t = threading.Thread(target=display, args = (GPIO,cfg))
-		t.daemon = True
+		# t.daemon = True
 		t.start()
 	else:
+		#automated test code goes here
 		pass
 
 #naming clash with python's input
@@ -105,7 +105,7 @@ def cleanup():
 	GPIO.cleanup()
 
 def display(GPIO,cfg):
-	# pass
+	# root gui window
 	top = Tkinter.Tk()
 	for door in cfg.GARAGE_DOORS:
 		pin = door['pin']
